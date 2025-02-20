@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - StudyNexus</title>
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+<div class="dashboard-container">
+    <header>
+        <h1>StudyNexus Dashboard</h1>
+        <div class="user-info">
+            <span id="user-name">Loading...</span>
+            <a href="/logout" class="btn btn-logout">Logout</a>
+        </div>
+    </header>
+
+    <main>
+        <p>Welcome to your dashboard!</p>
+        <div id="token-info"></div>
+    </main>
+</div>
+
+<script>
+    // Fetch user info
+    fetch('/api/user/me')
+        .then(response => response.json())
+        .then(user => {
+            document.getElementById('user-name').textContent = user.fullName;
+        });
+
+    // Get JWT token for API access
+    fetch('/api/auth/token')
+        .then(response => response.json())
+        .then(data => {
+            if (data.token) {
+                localStorage.setItem('auth_token', data.token);
+                document.getElementById('token-info').textContent =
+                    'Your JWT token has been stored for API access';
+            }
+        });
+</script>
+</body>
+</html>
