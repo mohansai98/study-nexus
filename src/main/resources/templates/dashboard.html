@@ -5,6 +5,187 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - StudyNexus</title>
     <link rel="stylesheet" href="/css/main.css">
+    <style>
+        /* Dashboard layout */
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .dashboard-flex {
+            display: flex;
+            gap: 20px;
+        }
+
+        .sidebar {
+            flex: 0 0 250px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .main-content {
+            flex: 1;
+        }
+
+        /* User list styling */
+        .user-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .user-list-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+
+        .user-list-item:hover {
+            background: #e9ecef;
+        }
+
+        .user-list-item.active {
+            background: #e2f0ff;
+            font-weight: bold;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            overflow: hidden;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        .user-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .user-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-left: auto;
+        }
+
+        .status-online {
+            background: #28a745;
+        }
+
+        .status-offline {
+            background: #dc3545;
+        }
+
+        /* Chat container styling */
+        #chat-container {
+            width: 100%;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            height: 500px;
+        }
+
+        #chat-header {
+            padding: 10px 15px;
+            background: #007bff;
+            color: #fff;
+            border-radius: 5px 5px 0 0;
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+        }
+
+        #current-chat-user {
+            margin-left: 10px;
+            font-weight: bold;
+        }
+
+        #chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            background: #f1f1f1;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .chat-message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            max-width: 80%;
+            position: relative;
+        }
+
+        .chat-message.self {
+            background: #d1e7dd;
+            margin-left: auto;
+            border-bottom-right-radius: 0;
+        }
+
+        .chat-message.other {
+            background: #f8d7da;
+            margin-right: auto;
+            border-bottom-left-radius: 0;
+        }
+
+        .chat-message .timestamp {
+            font-size: 0.75em;
+            color: #666;
+            margin-top: 4px;
+            text-align: right;
+        }
+
+        #chat-input {
+            display: flex;
+            padding: 10px;
+        }
+
+        #chatInput {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        #sendChatBtn {
+            margin-left: 10px;
+            padding: 10px 15px;
+            border: none;
+            background: #007bff;
+            color: #fff;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #sendChatBtn:hover {
+            background: #0069d9;
+        }
+
+        .no-chat-selected {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #6c757d;
+            font-size: 1.2em;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
 </head>
 <body>
 <div class="dashboard-container">
@@ -17,29 +198,332 @@
     </header>
 
     <main>
-        <p>Welcome to your dashboard!</p>
-        <div id="token-info"></div>
+        <div class="dashboard-flex">
+            <!-- User list sidebar -->
+            <div class="sidebar">
+                <h3>Direct Messages</h3>
+                <div id="user-search">
+                    <input type="text" id="userSearchInput" placeholder="Search users..." class="form-control" style="width:100%; padding:8px; margin-bottom:10px; border:1px solid #ddd; border-radius:3px;">
+                </div>
+                <ul id="user-list" class="user-list">
+                    <li class="loading-placeholder">Loading users...</li>
+                </ul>
+            </div>
+
+            <!-- Main chat area -->
+            <div class="main-content">
+                <div id="chat-container">
+                    <div id="chat-header">
+                        Direct Messages
+                        <span id="current-chat-user"></span>
+                    </div>
+                    <div id="chat-messages">
+                        <div class="no-chat-selected">
+                            <p>Select a user from the list to start a conversation</p>
+                        </div>
+                    </div>
+                    <div id="chat-input">
+                        <input type="text" id="chatInput" placeholder="Type your message..." disabled />
+                        <button id="sendChatBtn" disabled>Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 </div>
 
 <script>
-    // Fetch user info
-    fetch('/api/user/me')
-        .then(response => response.json())
-        .then(user => {
-            document.getElementById('user-name').textContent = user.fullName;
-        });
+    // Chat state management
+    const ChatManager = {
+        socket: null,
+        currentUserId: null,
+        currentRoomId: null,
+        rooms: new Map(), // roomId -> { userId, messages }
+        reconnectAttempts: 0,
+        maxReconnectAttempts: 5,
+        reconnectDelay: 2000,
 
-    // Get JWT token for API access
-    fetch('/api/auth/token')
-        .then(response => response.json())
-        .then(data => {
-            if (data.token) {
-                localStorage.setItem('auth_token', data.token);
-                document.getElementById('token-info').textContent =
-                    'Your JWT token has been stored for API access';
+        // Initialize chat functionality
+        async init() {
+            try {
+                const userResponse = await fetch('/api/user/me');
+                const user = await userResponse.json();
+                this.currentUserId = user.id;
+                document.getElementById('user-name').textContent = user.fullName;
+
+                const tokenResponse = await fetch('/api/auth/token');
+                const { token } = await tokenResponse.json();
+
+                if (token) {
+                    localStorage.setItem('auth_token', token);
+                    this.connectWebSocket();
+                    this.setupEventListeners();
+                    await this.loadUsers();
+                }
+            } catch (error) {
+                console.error('Chat initialization failed:', error);
+                this.showError('Failed to initialize chat. Please refresh the page.');
             }
-        });
+        },
+
+        // WebSocket connection handling
+        connectWebSocket() {
+            const token = localStorage.getItem('auth_token');
+            if (!token) return;
+
+            const wsUrl = `ws://${window.location.host}/ws/chat?token=${token}`;
+            this.socket = new WebSocket(wsUrl);
+
+            this.socket.onopen = () => {
+                console.log('Connected to chat server');
+                this.reconnectAttempts = 0;
+                this.reconnectRooms();
+            };
+
+            this.socket.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    this.handleMessage(message);
+                } catch (error) {
+                    console.error('Failed to process message:', error);
+                }
+            };
+
+            this.socket.onclose = () => {
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    setTimeout(() => {
+                        this.reconnectAttempts++;
+                        this.connectWebSocket();
+                    }, this.reconnectDelay);
+                } else {
+                    this.showError('Connection lost. Please refresh the page.');
+                }
+            };
+
+            this.socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        },
+
+        // Message handling
+        handleMessage(message) {
+            switch (message.type) {
+                case 'MESSAGE':
+                    this.handleChatMessage(message);
+                    break;
+                case 'ROOM_JOINED':
+                    this.handleRoomJoined(message);
+                    break;
+                default:
+                    console.warn('Unknown message type:', message.type);
+            }
+        },
+
+        handleChatMessage(message) {
+            // Store message in room history
+            const room = this.rooms.get(message.roomId);
+            if (room) {
+                room.messages.push(message);
+                // Only display if it's the current room
+                if (message.roomId === this.currentRoomId) {
+                    this.displayMessage(message);
+                }
+            }
+        },
+
+        handleRoomJoined(message) {
+            // Initialize room if not exists
+            if (!this.rooms.has(message.roomId)) {
+                this.rooms.set(message.roomId, {
+                    messages: [],
+                    lastAccessed: Date.now()
+                });
+            }
+            this.loadRoomHistory(message.roomId);
+        },
+
+        // UI Interactions
+        async loadUsers() {
+            try {
+                const response = await fetch('/api/users/list');
+                const users = await response.json();
+                const filteredUsers = users.filter(user => user.id !== this.currentUserId);
+                this.renderUserList(filteredUsers);
+            } catch (error) {
+                console.error('Failed to load users:', error);
+                this.showError('Failed to load users list.');
+            }
+        },
+
+        renderUserList(users) {
+            const userList = document.getElementById('user-list');
+            userList.innerHTML = users.length ? '' : '<li class="no-users">No users found</li>';
+
+            users.forEach(user => {
+                const li = document.createElement('li');
+                li.className = 'user-list-item';
+                li.innerHTML = `
+                        <div class="user-avatar">
+                            <img src="${user.avatarUrl}" alt="${user.fullName}">
+                        </div>
+                        <span>${user.fullName}</span>
+                    `;
+                li.onclick = () => this.selectUser(user);
+                userList.appendChild(li);
+            });
+        },
+
+        async selectUser(user) {
+            try {
+                // Generate room ID
+                const roomId = this.generateRoomId(this.currentUserId, user.id);
+
+                // Update UI
+                document.querySelectorAll('.user-list-item').forEach(item =>
+                    item.classList.toggle('active', item.textContent.includes(user.fullName))
+                );
+                document.getElementById('current-chat-user').textContent = user.fullName;
+                document.getElementById('chat-messages').innerHTML = '';
+
+                // Enable chat input
+                const chatInput = document.getElementById('chatInput');
+                const sendButton = document.getElementById('sendChatBtn');
+                chatInput.disabled = sendButton.disabled = false;
+
+                // Join room
+                this.currentRoomId = roomId;
+                this.joinRoom(roomId);
+
+                // Display existing messages if any
+                const room = this.rooms.get(roomId);
+                if (room) {
+                    room.messages.forEach(msg => this.displayMessage(msg));
+                }
+            } catch (error) {
+                console.error('Failed to select user:', error);
+                this.showError('Failed to start chat with user.');
+            }
+        },
+
+        // Helper methods
+        generateRoomId(user1Id, user2Id) {
+            return user1Id < user2Id ?
+                `${user1Id}_${user2Id}` :
+                `${user2Id}_${user1Id}`;
+        },
+
+        joinRoom(roomId) {
+            if (this.socket?.readyState === WebSocket.OPEN) {
+                this.socket.send(JSON.stringify({
+                    type: 'JOIN_ROOM',
+                    roomId: roomId
+                }));
+            }
+        },
+
+        async loadRoomHistory(roomId) {
+            try {
+                const response = await fetch(`/api/chat/history/${roomId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                    }
+                });
+                const messages = await response.json();
+
+                // Store and display messages
+                this.rooms.get(roomId).messages = messages;
+                if (roomId === this.currentRoomId) {
+                    document.getElementById('chat-messages').innerHTML = '';
+                    messages.forEach(msg => this.displayMessage(msg));
+                }
+            } catch (error) {
+                console.error('Failed to load chat history:', error);
+            }
+        },
+
+        displayMessage(message) {
+            const messagesDiv = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${message.senderId === this.currentUserId ? 'self' : 'other'}`;
+
+            const time = message.timestamp ?
+                new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) :
+                new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+            messageDiv.innerHTML = `
+                    <div class="message-content">${this.escapeHtml(message.content)}</div>
+                    <div class="timestamp">${time}</div>
+                `;
+
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        },
+
+        sendMessage() {
+            const chatInput = document.getElementById('chatInput');
+            const content = chatInput.value.trim();
+
+            if (!content || !this.currentRoomId) return;
+
+            if (this.socket?.readyState === WebSocket.OPEN) {
+                this.socket.send(JSON.stringify({
+                    type: 'MESSAGE',
+                    roomId: this.currentRoomId,
+                    content: content
+                }));
+                chatInput.value = '';
+            } else {
+                this.showError('Connection lost. Please refresh the page.');
+            }
+        },
+
+        reconnectRooms() {
+            // Rejoin all active rooms after reconnection
+            this.rooms.forEach((_, roomId) => this.joinRoom(roomId));
+        },
+
+        setupEventListeners() {
+            // Chat input handling
+            const chatInput = document.getElementById('chatInput');
+            const sendButton = document.getElementById('sendChatBtn');
+
+            chatInput.onkeypress = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.sendMessage();
+                }
+            };
+
+            sendButton.onclick = () => this.sendMessage();
+
+            // User search handling
+            const searchInput = document.getElementById('userSearchInput');
+            searchInput.oninput = (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                document.querySelectorAll('.user-list-item').forEach(item => {
+                    const userName = item.textContent.toLowerCase();
+                    item.style.display = userName.includes(searchTerm) ? '' : 'none';
+                });
+            };
+        },
+
+        showError(message) {
+            // You can implement your preferred error display method
+            alert(message);
+        },
+
+        escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    };
+
+    // Initialize chat when document is ready
+    document.addEventListener('DOMContentLoaded', () => ChatManager.init());
 </script>
 </body>
 </html>

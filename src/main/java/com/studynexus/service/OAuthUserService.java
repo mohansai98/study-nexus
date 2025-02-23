@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
@@ -17,6 +18,14 @@ public class OAuthUserService {
 
     private final UserRepository userRepository;
 
+    public Flux<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+
+    public Mono<User> findUserByEmail(String email) {
+        return userRepository.findByEmail(email);
+    }
+
     public Mono<User> processOAuthUser(OAuth2AuthenticationToken authentication) {
         OAuth2User oAuth2User = authentication.getPrincipal();
         String provider = authentication.getAuthorizedClientRegistrationId();
@@ -25,27 +34,24 @@ public class OAuthUserService {
         String email = attributes.get("email").toString();
         String providerId = attributes.get("sub").toString();
 
-        return userRepository.findByProviderAndProviderId(provider, providerId)
-                .flatMap(user -> {
-                    // User found, update last login
-                    user.setLastLogin(LocalDateTime.now());
-                    return userRepository.save(user);
+        return userRepository.findByEmail(email)
+                .flatMap(existingUser -> {
+                    boolean needsUpdate = false;
+
+                    // Check if provider details need updating
+                    if (!provider.equals(existingUser.getProvider()) ||
+                            !providerId.equals(existingUser.getProviderId())) {
+                        existingUser.setProvider(provider);
+                        existingUser.setProviderId(providerId);
+                        needsUpdate = true;
+                    }
+
+                    existingUser.setLastLogin(LocalDateTime.now());
+                    needsUpdate = true;
+
+                    return needsUpdate ? userRepository.save(existingUser) : Mono.just(existingUser);
                 })
-                .switchIfEmpty(
-                        // If not found by provider, try by email
-                        userRepository.findByEmail(email)
-                                .flatMap(existingUser -> {
-                                    // Found by email, update provider details
-                                    existingUser.setProvider(provider);
-                                    existingUser.setProviderId(providerId);
-                                    existingUser.setLastLogin(LocalDateTime.now());
-                                    return userRepository.save(existingUser);
-                                })
-                                .switchIfEmpty(
-                                        // Not found by either method, create new
-                                        createNewUser(attributes, provider, providerId)
-                                )
-                );
+                .switchIfEmpty(createNewUser(attributes, provider, providerId));
     }
 
     private Mono<User> createNewUser(Map<String, Object> attributes, String provider, String providerId) {
@@ -59,5 +65,4 @@ public class OAuthUserService {
         user.setLastLogin(LocalDateTime.now());
         return userRepository.save(user);
     }
-
 }

@@ -1,5 +1,6 @@
-package com.studynexus.model;
+package com.studynexus.dto;
 
+import com.studynexus.model.User;
 import lombok.Data;
 
 @Data
